@@ -500,9 +500,31 @@ mark{background:var(--mark);color:inherit;border-radius:2px;padding:0 2px}
     <textarea id="w-text" spellcheck="false" autocapitalize="sentences" placeholder="Escribe aquí tu texto en inglés…"></textarea>
     <details><summary>Lista antes de entregar</summary><div class="body"><ul class="tick" id="w-check"></ul></div></details>
     <div class="row">
-      <button class="btn" id="w-grade">Corregir con Claude</button>
-      <button class="btn ghost" id="w-copy">Copiar texto</button>
+      <button class="btn" id="w-grade-gem">Corregir con Gemini</button>
+      <button class="btn ghost" id="w-grade">Corregir con Claude</button>
       <button class="btn ghost" id="w-copyprompt">Copiar para el chat</button>
+      <button class="btn ghost" id="w-copy">Copiar texto</button>
+    </div>
+    <div class="row small muted">
+      <button type="button" class="linkbtn" id="gem-cfg-btn">Configurar clave de Gemini</button>
+      <span>·</span>
+      <button type="button" class="linkbtn" id="w-imp-btn">Pegar corrección de chat (JSON)</button>
+    </div>
+    <div class="card stack hide" id="gem-cfg">
+      <div class="small muted">Pega tu clave gratuita de <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a>. Se guarda solo en este navegador (no se sube a GitHub ni a Drive).</div>
+      <div class="row">
+        <input id="gem-key-in" type="password" placeholder="AIza…" style="flex:1;min-width:200px;padding:8px 10px;border:1.5px solid var(--line);border-radius:8px;background:var(--surface)">
+        <button class="btn sm" id="gem-key-save">Guardar clave</button>
+        <button class="btn sm ghost" id="gem-key-del">Borrar</button>
+      </div>
+    </div>
+    <div class="card stack hide" id="w-imp-box">
+      <div class="small muted">Si corriges en un chat de Gemini o Claude usando «Copiar para el chat», pega aquí el JSON que te devuelva para guardar tu nota y tus errores en el plan:</div>
+      <textarea id="w-imp-in" rows="4" placeholder='{"scores": {...}, "verdict": "..."}'></textarea>
+      <div class="row">
+        <button class="btn sm" id="w-imp-apply">Guardar corrección</button>
+        <button class="btn sm ghost" id="w-imp-cancel">Cerrar</button>
+      </div>
     </div>
     <p class="small muted" id="w-msg" role="status"></p>
   </div>
@@ -1055,37 +1077,105 @@ function feedbackHTML(fb,t){
 function bindFb(){const b=$("#fb-copy"); if(b) b.onclick=()=>copyText($("#fb-rw").textContent,$("#fb-msg"));}
 
 let sampleFn=null, grading=false;
+const GEM_KEY_LS="ise3_gemini_key";
+const getGemKey=()=>{try{return (localStorage.getItem(GEM_KEY_LS)||"").trim();}catch(e){return "";}};
+function setGemKey(k){try{if(k) localStorage.setItem(GEM_KEY_LS,k); else localStorage.removeItem(GEM_KEY_LS);}catch(e){}}
+function paintGemBtn(){const b=$("#gem-cfg-btn"); if(b) b.textContent=getGemKey()?"Clave de Gemini guardada (cambiar)":"Configurar clave de Gemini";}
+paintGemBtn();
+
+function applyGradeFeedback(t,text,rawText,sourceLabel){
+  let fb; try{fb=parseJSON(rawText);}catch(e){fb={raw:rawText};}
+  const d=S.drafts[t.id]||(S.drafts[t.id]={}); d.fb=fb; d.text=text; d.plan=wPlan.value;
+  if(!fb.raw){
+    const keys=Object.keys(CRIT).filter(k=>!(k==="reading_for_writing"&&t.type!=="riw"));
+    const sum=keys.reduce((a,k)=>a+Math.max(0,Math.min(4,Number((fb.scores||{})[k])||0)),0);
+    S.wscores[t.id]={sum,max:keys.length*4,d:Date.now()};
+    if((S.tracker[t.id]||0)<1&&TRACK.some(x=>x.id===t.id)) S.tracker[t.id]=1;
+    (fb.errors||[]).forEach(e=>{ if(e&&e.original&&e.fix&&!S.errors.some(x=>x.o===e.original)) S.errors.unshift({t:e.type||"otro",o:e.original,f:e.fix,w:e.why||"",task:t.id}); });
+    S.errors=S.errors.slice(0,150);
+  }
+  save(true); $("#w-feedback").innerHTML=feedbackHTML(fb,t); bindFb();
+  $("#w-msg").textContent=`Corrección lista${sourceLabel?" ("+sourceLabel+")":""}. Tus errores se han guardado en Plan.`;
+  $("#w-feedback").scrollIntoView({behavior:"smooth",block:"start"});
+}
+
+$("#gem-cfg-btn").addEventListener("click",()=>{
+  const box=$("#gem-cfg"), open=box.classList.toggle("hide");
+  if(!open){ $("#gem-key-in").value=getGemKey(); $("#gem-key-in").focus(); }
+});
+$("#gem-key-save").addEventListener("click",()=>{
+  const k=$("#gem-key-in").value.trim();
+  if(!k){$("#w-msg").textContent="Pega primero tu clave de API de Gemini.";return;}
+  setGemKey(k); paintGemBtn(); $("#gem-cfg").classList.add("hide");
+  $("#w-msg").textContent="Clave de Gemini guardada en este navegador.";
+});
+$("#gem-key-del").addEventListener("click",()=>{
+  setGemKey(""); $("#gem-key-in").value=""; paintGemBtn(); $("#gem-cfg").classList.add("hide");
+  $("#w-msg").textContent="Clave de Gemini borrada de este navegador.";
+});
+$("#w-imp-btn").addEventListener("click",()=>{
+  const box=$("#w-imp-box"), hidden=box.classList.toggle("hide");
+  if(!hidden){ $("#w-imp-in").value=""; $("#w-imp-in").focus(); }
+});
+$("#w-imp-cancel").addEventListener("click",()=>$("#w-imp-box").classList.add("hide"));
+$("#w-imp-apply").addEventListener("click",()=>{
+  const raw=$("#w-imp-in").value.trim(); if(!raw){$("#w-msg").textContent="Pega primero el JSON devuelto por el chat.";return;}
+  try{ parseJSON(raw); }catch(e){ $("#w-msg").textContent="No se encontró un JSON válido en el texto pegado."; return; }
+  applyGradeFeedback(task(),wText.value,raw,"chat");
+  $("#w-imp-box").classList.add("hide");
+});
 
 $("#w-copyprompt").addEventListener("click",()=>{
   const t=task(); if(wc(wText.value)<30){$("#w-msg").textContent="Escribe primero el texto.";return;}
-  copyText(buildPrompt(t,wText.value),$("#w-msg")).then(()=>{ if($("#w-msg").textContent.startsWith("Copiado")) $("#w-msg").textContent="Copiado. Pégalo en un chat de tu proyecto INGLES y tendrás la corrección allí."; });
+  copyText(buildPrompt(t,wText.value),$("#w-msg")).then(()=>{ if($("#w-msg").textContent.startsWith("Copiado")) $("#w-msg").textContent="Copiado. Pégalo en un chat de Gemini o Claude; si quieres guardar la nota aquí, pega su JSON en «Pegar corrección de chat»."; });
 });
+
+$("#w-grade-gem").addEventListener("click",async()=>{
+  if(grading) return;
+  const t=task(), text=wText.value, msg=$("#w-msg"), n=wc(text);
+  if(n<60){msg.textContent="Texto demasiado corto para corregir: escribe al menos el borrador completo.";return;}
+  const key=getGemKey();
+  if(!key){
+    $("#gem-cfg").classList.remove("hide"); $("#gem-key-in").focus();
+    msg.textContent="Añade tu clave de Gemini arriba (o usa «Copiar para el chat» para pegarlo en Gemini sin clave).";
+    return;
+  }
+  grading=true; $("#w-grade-gem").disabled=true; $("#w-grade").disabled=true;
+  msg.textContent="Gemini está corrigiendo tu texto…";
+  try{
+    const r=await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","x-goog-api-key":key},
+      body:JSON.stringify({
+        contents:[{parts:[{text:buildPrompt(t,text)}]}],
+        generationConfig:{responseMimeType:"application/json",temperature:0.2}
+      })
+    });
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error((j&&j.error&&j.error.message)||("HTTP "+r.status));
+    const out=(j.candidates&&j.candidates[0]&&j.candidates[0].content&&j.candidates[0].content.parts||[]).map(p=>p.text||"").join("");
+    if(!out) throw new Error("Respuesta vacía de Gemini");
+    applyGradeFeedback(t,text,out,"Gemini");
+  }catch(err){
+    msg.textContent="Error con Gemini: "+(err&&err.message?err.message:"no se pudo completar")+". Revisa tu clave o usa «Copiar para el chat».";
+  }finally{grading=false;$("#w-grade-gem").disabled=false;$("#w-grade").disabled=false;}
+});
+
 $("#w-grade").addEventListener("click",async()=>{
   if(grading) return;
   const t=task(), text=wText.value, msg=$("#w-msg"), n=wc(text);
   if(n<60){msg.textContent="Texto demasiado corto para corregir: escribe al menos el borrador completo.";return;}
-  if(!sampleFn){msg.textContent="La corrección automática solo funciona dentro de Claude. Pulsa «Copiar para el chat» y pégalo en tu proyecto INGLES de Claude.";return;}
-  grading=true; $("#w-grade").disabled=true; msg.textContent="Claude está corrigiendo tu texto. Tarda alrededor de medio minuto…";
+  if(!sampleFn){msg.textContent="La corrección directa con Claude solo funciona dentro de Claude. Usa «Corregir con Gemini» o pulsa «Copiar para el chat» para pegarlo en Claude.";return;}
+  grading=true; $("#w-grade").disabled=true; $("#w-grade-gem").disabled=true; msg.textContent="Claude está corrigiendo tu texto. Tarda alrededor de medio minuto…";
   try{
     const res=await sampleFn(buildPrompt(t,text),{modelTier:"default",cache:false});
-    let fb; try{fb=parseJSON(res.text);}catch(e){fb={raw:res.text};}
-    const d=S.drafts[t.id]||(S.drafts[t.id]={}); d.fb=fb; d.text=text; d.plan=wPlan.value;
-    if(!fb.raw){
-      const keys=Object.keys(CRIT).filter(k=>!(k==="reading_for_writing"&&t.type!=="riw"));
-      const sum=keys.reduce((a,k)=>a+Math.max(0,Math.min(4,Number((fb.scores||{})[k])||0)),0);
-      S.wscores[t.id]={sum,max:keys.length*4,d:Date.now()};
-      if((S.tracker[t.id]||0)<1&&TRACK.some(x=>x.id===t.id)) S.tracker[t.id]=1;
-      (fb.errors||[]).forEach(e=>{ if(e&&e.original&&e.fix&&!S.errors.some(x=>x.o===e.original)) S.errors.unshift({t:e.type||"otro",o:e.original,f:e.fix,w:e.why||"",task:t.id}); });
-      S.errors=S.errors.slice(0,150);
-    }
-    save(true); $("#w-feedback").innerHTML=feedbackHTML(fb,t); bindFb(); msg.textContent="Corrección lista. Tus errores se han guardado en Plan.";
-    $("#w-feedback").scrollIntoView({behavior:"smooth",block:"start"});
+    applyGradeFeedback(t,text,res.text,"Claude");
   }catch(err){
     const code=err&&err.code;
     msg.textContent=code==="rate_limited"?"Demasiadas correcciones seguidas. Espera un minuto y vuelve a intentarlo.":
-      code==="not_granted"?"No se concedió el permiso para consultar a Claude. Puedes usar “Copiar para el chat”.":
-      "No se pudo completar la corrección. Vuelve a intentarlo o usa “Copiar para el chat”.";
-  }finally{grading=false;$("#w-grade").disabled=false;}
+      code==="not_granted"?"No se concedió el permiso para consultar a Claude. Puedes usar «Corregir con Gemini» o «Copiar para el chat».":
+      "No se pudo completar la corrección. Vuelve a intentarlo o usa «Copiar para el chat».";
+  }finally{grading=false;$("#w-grade").disabled=false;$("#w-grade-gem").disabled=false;}
 });
 
 /* ---------- bank ---------- */
@@ -1551,7 +1641,8 @@ $("#rut-chip").addEventListener("click",rutOpen);
 let rutBusy=false;
 function rutRow(min,note){const d=rutDay(),dt=new Date(d+"T12:00:00"),th=new Date(dt); th.setDate(dt.getDate()+3-((dt.getDay()+6)%7)); const y1=new Date(th.getFullYear(),0,4);
   const wk=1+Math.round(((th-y1)/864e5-3+((y1.getDay()+6)%7))/7);
-  return {Fecha:d,Semana:wk,Entreno_Tipo:"",Entreno_Min:0,Estudio_Oposicion_Min:0,Estudio_EC135_Min:0,Ingles_ISE3_Min:min,Habitos_Clave:"",Energia_1_10:"",Notas:note,Resultado:"",Temas:""};}
+  const id="ise"+Math.random().toString(36).slice(2,9);
+  return {Fecha:d,Semana:wk,Entreno_Tipo:"",Entreno_Min:0,Estudio_Oposicion_Min:0,Estudio_EC135_Min:0,Ingles_ISE3_Min:min,Habitos_Clave:"",Energia_1_10:"",Notas:note,Resultado:"",Temas:"",ID:id};}
 function rutNoteAuto(){ if(VNAME[curView]) RUT.views.add(VNAME[curView]); return "ISE III"+(RUT.views.size?" · "+[...RUT.views].join(", "):""); }
 $("#rut-send").addEventListener("click",async()=>{
   if(rutBusy) return; const min=Math.round(Number($("#rut-min").value)); const msg=$("#rut-msg");
@@ -1568,14 +1659,14 @@ $("#rut-send").addEventListener("click",async()=>{
   }catch(err){ msg.textContent=navigator.onLine?"No se pudo confirmar el envío. Mira en Rutina si ya aparece antes de reintentar.":"Sin conexión. Inténtalo al volver."; }
   finally{rutBusy=false; $("#rut-send").disabled=false;}
 });
-// Al salir o cerrar: los minutos pendientes se envían solos
-function rutBeacon(){ const o=rutGet(),min=rutPend(o),c=rcfg(); if(min<1||!c||!navigator.onLine) return;
+// Al cambiar de pestaña envía si hay ≥5 min; al cerrar la app envía desde ≥1 min
+function rutBeacon(minThreshold){ const o=rutGet(),min=rutPend(o),c=rcfg(); if(min<(minThreshold||1)||!c||!navigator.onLine) return;
   const body=JSON.stringify({token:c.k,action:"append",row:rutRow(min,rutNoteAuto())}); let ok=false;
   try{ok=!!(navigator.sendBeacon&&navigator.sendBeacon(c.u,new Blob([body],{type:"text/plain;charset=utf-8"})));}catch(e){}
   if(!ok){try{fetch(c.u,{method:"POST",mode:"no-cors",keepalive:true,headers:{"Content-Type":"text/plain;charset=utf-8"},body});ok=true;}catch(e){}}
   if(ok){o.sent=Math.min(o.ms,o.sent+min*60000); rutPut(o); RUT.views.clear();} }
-document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="hidden") rutBeacon(); });
-window.addEventListener("pagehide",rutBeacon);
+document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="hidden") rutBeacon(5); });
+window.addEventListener("pagehide",()=>rutBeacon(1));
 rutPaint();
 
 
