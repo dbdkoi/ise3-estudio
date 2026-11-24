@@ -257,6 +257,7 @@ mark{background:var(--mark);color:inherit;border-radius:2px;padding:0 2px}
 .of-prog i{display:block;height:100%;background:var(--accent)}
 .tabs{overflow-x:auto;scrollbar-width:none}.tabs::-webkit-scrollbar{display:none}
 .tabs a{font-family:var(--f-body);text-transform:none;letter-spacing:0;font-size:.9rem;font-weight:600;white-space:nowrap;flex:1 0 auto;padding-left:8px;padding-right:8px}
+.linkbtn{background:none;border:0;padding:0 2px;color:var(--accent);text-decoration:underline;font:inherit;cursor:pointer}
 </style>
 </head>
 <body>
@@ -429,6 +430,11 @@ mark{background:var(--mark);color:inherit;border-radius:2px;padding:0 2px}
     <h2>Corrector de tus 6 tests</h2>
     <p class="small muted">Haz el test en el PDF, mete aquí tus respuestas y te las corrige con la clave del proyecto.</p>
     <div class="chips" id="test-chips"></div>
+  </div>
+  <div class="stack" id="of-read" hidden>
+    <h2>Exámenes oficiales de Trinity</h2>
+    <p class="small muted">Los 7 sample papers y las fichas oficiales, interactivos y corregidos con la clave de Trinity. Están cifrados: solo se abren en tu dispositivo con tu clave de Rutina.</p>
+    <div class="chips" id="of-chips"></div>
   </div>
   <div id="quiz" class="stack"></div>
 </section>
@@ -873,6 +879,7 @@ function openSet(id){
   $("#q-mark").onclick=()=>markSet(id);
   q.scrollIntoView({behavior:"smooth",block:"start"});
 }
+const setMax=set=>set.parts.reduce((a,p)=>a+(p.type==="pick5"?5:p.type==="match"?p.answers.length:p.items.length),0);
 function markSet(id){
   const set=SETS[id], q=$("#quiz"); let score=0;
   set.parts.forEach((p,pi)=>{
@@ -891,10 +898,13 @@ function markSet(id){
         const fb=$(".fb",row);fb.className="fb "+(ok?"ok":"bad");fb.textContent=(ok?"✓ ":"✗ Clave: "+it.accept.join(" / ")+". ")+(it.why||"");});
     }
   });
-  $("#q-score").textContent=score+"/15";
-  $("#q-note").textContent=score>=12?"Muy sólido. Mantén el ritmo de 20 minutos.":score>=10?"En objetivo. Revisa por qué fallaste cada una antes de pasar a otra.":"Por debajo del objetivo de 10/15. Repite la maniobra del tipo de pregunta donde más has fallado.";
-  S.reading[id]={score,max:15,d:Date.now()};save();
+  const max=setMax(set);
+  $("#q-score").textContent=score+"/"+max;
+  const r15=score/max*15;
+  $("#q-note").textContent=r15>=12?"Muy sólido. Mantén el ritmo de 20 minutos.":r15>=10?"En objetivo. Revisa por qué fallaste cada una antes de pasar a otra.":"Por debajo del objetivo de 10/15. Repite la maniobra del tipo de pregunta donde más has fallado.";
+  S.reading[id]={score,max,d:Date.now()};save();
   const c=$(`#test-chips [data-set="${id}"]`); if(c) c.textContent=c.textContent.replace(/ · \d+\/15$/,"")+` · ${score}/15`;
+  if(id.startsWith("o")) renderOfChips();
 }
 
 /* ---------- genres ---------- */
@@ -953,20 +963,27 @@ $("#genre-chips").addEventListener("click",e=>{const b=e.target.closest("[data-g
 
 /* ---------- workshop ---------- */
 const sel=$("#w-task"), wText=$("#w-text"), wPlan=$("#w-plan");
-sel.innerHTML=["Tus tests","Práctica extra"].map(g=>`<optgroup label="${g}">${TASKS.filter(t=>t.grp===g).map(t=>`<option value="${t.id}">${esc(t.label)}</option>`).join("")}</optgroup>`).join("");
+function fillTaskSel(){ const v=sel.value; sel.innerHTML=["Tus tests","Oficiales Trinity","Práctica extra"].filter(g=>TASKS.some(t=>t.grp===g)).map(g=>`<optgroup label="${g}">${TASKS.filter(t=>t.grp===g).map(t=>`<option value="${t.id}">${esc(t.label)}</option>`).join("")}</optgroup>`).join(""); if(v&&TASKS.some(t=>t.id===v)) sel.value=v; }
+fillTaskSel();
 const task=()=>TASKS.find(t=>t.id===sel.value)||TASKS[0];
 function selectTask(id){ if(TASKS.some(t=>t.id===id)) sel.value=id; loadTask(); }
 function loadTask(){
   const t=task(); S.last=t.id; save();
   $("#w-brief").innerHTML=`<div class="row"><span class="pill ${t.type==="riw"?"warn":"good"}">${t.type==="riw"?"Task 3 · Reading into writing":"Task 4 · Extended writing"}</span><span class="pill off">${G[t.genre]}</span></div>
     <p class="en">${esc(t.prompt)}</p>${t.type==="riw"&&!t.srcSet?`<p class="small muted">Usa los textos A–D de la Task 2 del PDF “TEST ${t.test}”. El corrector trabaja con un resumen de esos textos.</p>`:""}`;
-  $("#w-sources").innerHTML=t.srcSet?`<details><summary>Textos fuente A–D</summary><div class="body">${sourcesHTML(SETS[t.srcSet])}</div></details>`:"";
+  $("#w-sources").innerHTML=(t.srcSet&&SETS[t.srcSet]?`<details><summary>Textos fuente A–D</summary><div class="body">${sourcesHTML(SETS[t.srcSet])}</div></details>`:"")+modelHTML(t);
   const d=S.drafts[t.id]||{}; wText.value=d.text||""; wPlan.value=d.plan||"";
   const base=["Entre 200 y 230 palabras","Un párrafo por cada punto del enunciado","Dos estructuras C1 y conectores variados","Relectura: -s de tercera persona, artículos, preposiciones, sujeto presente"];
   const riw=t.type==="riw"?["Ideas de al menos tres textos, con tus palabras"]:[];
   $("#w-check").innerHTML=[...GENRES[t.genre].check,...riw,...base].map(c=>`<li>${esc(c)}</li>`).join("");
   $("#w-feedback").innerHTML=d.fb?feedbackHTML(d.fb,t):""; bindFb();
   $("#w-msg").textContent=""; count();
+}
+function modelHTML(t){
+  let h="";
+  if(t.model) h+=`<details><summary>Modelo oficial (ábrelo después de escribir)</summary><div class="body">${t.model.split(/\n\n+/).map(p=>`<p class="en">${esc(p)}</p>`).join("")}</div></details>`;
+  if(t.graded) h+=`<details><summary>Respuestas reales corregidas por Trinity</summary><div class="body">${t.graded.map(g=>`<div class="card"><div class="row"><b>${esc(g.who)}</b><span class="pill ${g.grade==="Distinction"?"good":g.grade==="Fail"?"warn":"off"}">${esc(g.grade)}</span><span class="small muted">${esc(g.scores)}</span></div><p class="small">${esc(g.note)}</p>${g.text?g.text.split(/\n\n+/).map(p=>`<p class="en">${esc(p)}</p>`).join(""):""}</div>`).join("")}</div></details>`;
+  return h;
 }
 function count(){
   const n=wc(wText.value); $("#w-count").textContent=n;
@@ -1451,7 +1468,7 @@ function renderToday(){
   const rs=Object.keys(S.reading||{});
   const nextR=["p1","p2","p3","p4"].find(id=>!S.reading[id]);
   if(nextR) acts.push(["Reading de 20 minutos",`Práctica ${SETS[nextR].title.replace("Práctica · ","")}: ${SETS[nextR].heading}.`,`data-go-set="${nextR}"`,"Empezar reading"]);
-  else { const worst=rs.map(k=>[k,S.reading[k].score]).sort((a,b)=>a[1]-b[1])[0]; if(worst&&worst[1]<12) acts.push(["Repite tu peor reading",`${SETS[worst[0]].title}: sacaste ${worst[1]}/15.`,`data-go-set="${worst[0]}"`,"Repetir"]); }
+  else { const worst=rs.map(k=>[k,S.reading[k].score]).sort((a,b)=>a[1]-b[1])[0]; if(worst&&SETS[worst[0]]&&worst[1]<12) acts.push(["Repite tu peor reading",`${SETS[worst[0]].title}: sacaste ${worst[1]}/${S.reading[worst[0]].max||15}.`,`data-go-set="${worst[0]}"`,"Repetir"]); }
   const nextW=TRACK.find(t=>!(S.tracker[t.id]>=1));
   if(nextW) acts.push(["Writing de 40 minutos",nextW.label+".",`data-open-task2="${nextW.id}"`,"Abrir en el taller"]);
   const gk=Object.keys(GT).map(k=>[k,gStat(k)]).filter(x=>x[1].n>=3).sort((a,b)=>a[1].ok/a[1].n-b[1].ok/b[1].n)[0];
@@ -1569,11 +1586,19 @@ const ofUrl=x=>DRV&&DRV.files&&DRV.files[x.id]?"https://drive.google.com/file/d/
 async function loadDrive(){ const c=rcfg(); if(!c) return;
   try{ const j=await (await fetch(c.u+"?token="+encodeURIComponent(c.k)+"&kv=ise3_drive&t="+Date.now())).json();
     if(j&&j.kv){ DRV=JSON.parse(j.kv); try{localStorage.setItem("ise3_drive",j.kv);}catch(e){} if(curView==="oficial") renderOficial(); } }catch(e){} }
+const OF_SET={t1a:"os-t1a",t1b:"os-t1b",t1c:"os-t1c",t2a:"os-t2a",t2b:"os-t2b",t3a:"os-t3a",t3b:"ow-t3b",t4a:"os-t4a",t4b:"os-t4b",t4c:"os-t4c",m2:"ow-m2a"};
+function ofPractice(id){ if(!OFB) return ""; const m=/^p(\d)n?$/.exec(id);
+  if(m) return ` <span class="small">· practicar <button class="linkbtn" data-of-go="o${m[1]}a">T1</button> <button class="linkbtn" data-of-go="o${m[1]}b">T2</button> <button class="linkbtn" data-of-go="w:o${m[1]}-3">T3</button> <button class="linkbtn" data-of-go="w:o${m[1]}-4">T4</button></span>`;
+  const t=OF_SET[id]; if(!t) return "";
+  return ` <span class="small">· <button class="linkbtn" data-of-go="${t.startsWith("ow-")?"w:"+t:t}">practicar en la app</button></span>`; }
+document.addEventListener("click",e=>{ const b=e.target.closest("[data-of-go]"); if(!b) return; const v=b.dataset.ofGo;
+  if(v.startsWith("w:")){ selectTask(v.slice(2)); show("taller"); location.hash="taller"; }
+  else if(SETS[v]){ show("reading"); location.hash="reading"; openSet(v); } });
 function renderOficial(){
   S.oficial=S.oficial||{}; const all=OFICIAL.filter(g=>g.g!=="Guías"&&g.g!=="Corregir y comparar").flatMap(g=>g.it), done=all.filter(x=>S.oficial[x.id]&&S.oficial[x.id].d).length;
   $("#of-body").innerHTML=`<p class="small muted">${done} de ${all.length} prácticas hechas</p><div class="of-prog"><i style="width:${Math.round(done/all.length*100)}%"></i></div>`+
     OFICIAL.map(g=>`<h3 style="margin-top:14px">${esc(g.g)}</h3><ul class="of-list">${g.it.map(x=>{const o=S.oficial[x.id]||{}; const prac=g.g!=="Guías"&&g.g!=="Corregir y comparar";
-      return `<li class="${o.d?"done":""}">${prac?`<input type="checkbox" data-of="${x.id}" ${o.d?"checked":""} aria-label="Hecho: ${esc(x.t)}">`:"<span></span>"}<div><a href="${ofUrl(x)}" target="_blank" rel="noopener">${esc(x.t)}</a>${o.d?`<small>Hecho el ${esc(new Date(o.d).toLocaleDateString("es-ES",{day:"numeric",month:"short"}))}${o.s?" · "+esc(o.s):""}</small>`:""}</div>${prac?`<input class="sc" data-ofs="${x.id}" value="${esc(o.s||"")}" placeholder="Nota" aria-label="Resultado de ${esc(x.t)}" maxlength="20">`:"<span></span>"}</li>`;}).join("")}</ul>`).join("")+
+      return `<li class="${o.d?"done":""}">${prac?`<input type="checkbox" data-of="${x.id}" ${o.d?"checked":""} aria-label="Hecho: ${esc(x.t)}">`:"<span></span>"}<div><a href="${ofUrl(x)}" target="_blank" rel="noopener">${esc(x.t)}</a>${ofPractice(x.id)}${o.d?`<small>Hecho el ${esc(new Date(o.d).toLocaleDateString("es-ES",{day:"numeric",month:"short"}))}${o.s?" · "+esc(o.s):""}</small>`:""}</div>${prac?`<input class="sc" data-ofs="${x.id}" value="${esc(o.s||"")}" placeholder="Nota" aria-label="Resultado de ${esc(x.t)}" maxlength="20">`:"<span></span>"}</li>`;}).join("")}</ul>`).join("")+
     `<p class="small muted" style="margin-top:10px">${DRV&&DRV.folder?`Los PDF se abren desde tu carpeta privada de Drive (<a href="https://drive.google.com/drive/folders/${esc(DRV.folder)}" target="_blank" rel="noopener">abrir carpeta</a>); solo tu cuenta de Google tiene acceso.`:"Los PDF son de Trinity College London y se abren en su web."} En «Nota» apunta lo que quieras: aciertos (12/15), palabras o tu impresión.</p>`;
 }
 document.addEventListener("change",e=>{ const id=e.target.dataset.of, ids=e.target.dataset.ofs; if(!id&&!ids) return; S.oficial=S.oficial||{};
@@ -1585,8 +1610,49 @@ $("#bk-imp").addEventListener("change",async e=>{ const f=e.target.files[0]; e.t
   try{ const o=JSON.parse(await f.text()); if(!o||o.app!=="ISE3"||!o.S) throw 0; S=Object.assign(blank(),o.S); S.u=Date.now(); localSave(); save(true); refreshAll(); msg.textContent="Copia restaurada."; }
   catch(er){ msg.textContent="Ese archivo no es una copia de esta app."; } });
 
+/* ---------- material oficial (privado, desde tu Drive) ---------- */
+let OFB=null;
+const GL={essay:"Essay",article:"Article",report:"Report",review:"Review",formal:"Formal letter/email",informal:"Informal email"};
+function applyOficial(B){
+  if(!B||!B.papers) return; OFB=B;
+  for(let i=TASKS.length-1;i>=0;i--) if(TASKS[i].grp==="Oficiales Trinity") TASKS.splice(i,1);
+  B.papers.forEach(P=>{ const n=P.n;
+    SETS[`o${n}a`]=Object.assign({id:`o${n}a`},P.t1); SETS[`o${n}b`]=Object.assign({id:`o${n}b`},P.t2);
+    TASKS.push({id:`o${n}-3`,grp:"Oficiales Trinity",type:"riw",genre:P.w3.genre,label:`Paper ${n} · Task 3 · ${GL[P.w3.genre]}`,srcSet:`o${n}b`,prompt:P.w3.prompt});
+    TASKS.push({id:`o${n}-4`,grp:"Oficiales Trinity",type:"ext",genre:P.w4.genre,label:`Paper ${n} · Task 4 · ${GL[P.w4.genre]}`,prompt:P.w4.prompt}); });
+  (B.extra||[]).forEach(X=>{
+    if(X.set) SETS[`os-${X.id}`]=Object.assign({id:`os-${X.id}`},X.set);
+    if(X.write){ const W=X.write, src=W.texts?`ow-${W.id}`:null; if(src) SETS[src]={id:src,heading:"Textos fuente",texts:W.texts};
+      TASKS.push({id:`ow-${W.id}`,grp:"Oficiales Trinity",type:src?"riw":"ext",genre:W.genre,label:"Ficha · "+W.label,srcSet:src||undefined,prompt:W.prompt,model:W.model,graded:W.graded}); }
+  });
+  fillTaskSel(); renderOfChips(); if(typeof curView!=="undefined"&&curView==="oficial") renderOficial();
+  if(S.last&&TASKS.some(t=>t.id===S.last)&&sel.value!==S.last){ sel.value=S.last; loadTask(); }
+}
+function renderOfChips(){
+  if(!OFB) return; $("#of-read").hidden=false;
+  const chip=(id,txt)=>{const r=S.reading[id]; return `<button class="chip" data-set="${id}">${esc(txt)}${r?` · ${r.score}/${r.max}`:""}</button>`;};
+  $("#of-chips").innerHTML=OFB.papers.map(P=>chip(`o${P.n}a`,`Paper ${P.n} · T1`)+chip(`o${P.n}b`,`Paper ${P.n} · T2`)).join("")+
+    (OFB.extra||[]).filter(X=>X.set).map(X=>chip(`os-${X.id}`,X.set.title.replace("Oficial · ",""))).join("");
+}
+async function decOficial(E,k){
+  const b=x=>Uint8Array.from(atob(x),c=>c.charCodeAt(0));
+  const km=await crypto.subtle.importKey("raw",new TextEncoder().encode(k),"PBKDF2",false,["deriveKey"]);
+  const key=await crypto.subtle.deriveKey({name:"PBKDF2",salt:b(E.s),iterations:200000,hash:"SHA-256"},km,{name:"AES-GCM",length:256},false,["decrypt"]);
+  const gz=await crypto.subtle.decrypt({name:"AES-GCM",iv:b(E.i)},key,b(E.c));
+  const txt=await new Response(new Blob([gz]).stream().pipeThrough(new DecompressionStream("gzip"))).text();
+  return JSON.parse(txt);
+}
+async function loadOficial(){
+  try{ const c=localStorage.getItem("ise3_oficial_cache"); if(c) applyOficial(JSON.parse(c)); }catch(e){}
+  const c=rcfg(); if(!c||!window.crypto||!crypto.subtle||typeof DecompressionStream==="undefined") return;
+  try{ const E=await (await fetch("oficial.enc",{cache:"no-cache"})).json();
+    const B=await decOficial(E,c.k);
+    if(!OFB||B.v!==OFB.v){ applyOficial(B); if(curView==="reading") show("reading"); }
+    try{localStorage.setItem("ise3_oficial_cache",JSON.stringify(B));}catch(e){} }catch(e){ console.warn("oficial",e); }
+}
+
 /* ---------- init ---------- */
-loadDrive();
+loadDrive(); loadOficial();
 sel.value=TASKS.some(t=>t.id===S.last)?S.last:"t1-3"; loadTask();
 paint();
 show(location.hash.slice(1)||"plan");
