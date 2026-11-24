@@ -1564,13 +1564,17 @@ rutPaint();
 
 /* ---------- exámenes oficiales de Trinity: enlaces y control de práctica ---------- */
 const OFICIAL=[{"g": "Modelos de examen completos", "it": [{"id": "p1n", "t": "Paper 1 · con notas", "r": "6723"}, {"id": "p1", "t": "Paper 1 · con respuestas", "r": "6059"}, {"id": "p2", "t": "Paper 2 · con respuestas", "r": "6680"}, {"id": "p3", "t": "Paper 3 · con respuestas", "r": "7204"}, {"id": "p4", "t": "Paper 4 · con respuestas", "r": "8247"}, {"id": "p5", "t": "Paper 5 · con respuestas", "r": "8248"}, {"id": "p6", "t": "Paper 6 · con respuestas", "r": "8710"}, {"id": "p7", "t": "Paper 7 · con respuestas", "r": "9873"}]}, {"g": "Task 1 · Long reading", "it": [{"id": "t1a", "t": "Stress management", "r": "6706"}, {"id": "t1b", "t": "Coffee", "r": "6707"}, {"id": "t1c", "t": "Birth order", "r": "6905"}]}, {"g": "Task 2 · Multi-text reading", "it": [{"id": "t2a", "t": "Future of our planet", "r": "6708"}, {"id": "t2b", "t": "Butterflies", "r": "6906"}]}, {"g": "Task 3 · Reading into writing", "it": [{"id": "t3a", "t": "Robots", "r": "6709"}, {"id": "t3b", "t": "Contemporary art", "r": "6710"}]}, {"g": "Task 4 · Extended writing", "it": [{"id": "t4a", "t": "Role models", "r": "6711"}, {"id": "t4b", "t": "Popular entertainment", "r": "6907"}, {"id": "t4c", "t": "The arts", "r": "7245"}]}, {"g": "Corregir y comparar", "it": [{"id": "m1", "t": "Cómo corregir los materiales de práctica", "r": "7353"}, {"id": "m2", "t": "Respuestas de candidatos ya corregidas", "r": "7028"}, {"id": "m3", "t": "Guía de géneros de writing (email, essay, review, report…)", "r": "6318"}]}, {"g": "Guías", "it": [{"id": "g1", "t": "Información del examen Reading & Writing", "r": "6299"}, {"id": "g2", "t": "Tabla de destrezas: Reading", "r": "10974"}, {"id": "g3", "t": "Tabla de destrezas: Writing", "r": "10976"}, {"id": "g4", "t": "Guía para estudiantes", "r": "6297"}, {"id": "g5", "t": "Resumen del examen para estudiantes", "r": "8448"}, {"id": "g6", "t": "Portfolio Toolkit (escritura por proceso)", "r": "6052"}, {"id": "g7", "t": "Plan de trabajo de 8 semanas (profesores)", "r": "6928"}]}];
-const ofUrl=r=>"https://www.trinitycollege.com/resource/?id="+r;
+let DRV=null; try{DRV=JSON.parse(localStorage.getItem("ise3_drive")||"null");}catch(e){}
+const ofUrl=x=>DRV&&DRV.files&&DRV.files[x.id]?"https://drive.google.com/file/d/"+DRV.files[x.id]+"/view":"https://www.trinitycollege.com/resource/?id="+x.r;
+async function loadDrive(){ const c=rcfg(); if(!c) return;
+  try{ const j=await (await fetch(c.u+"?token="+encodeURIComponent(c.k)+"&kv=ise3_drive&t="+Date.now())).json();
+    if(j&&j.kv){ DRV=JSON.parse(j.kv); try{localStorage.setItem("ise3_drive",j.kv);}catch(e){} if(curView==="oficial") renderOficial(); } }catch(e){} }
 function renderOficial(){
   S.oficial=S.oficial||{}; const all=OFICIAL.filter(g=>g.g!=="Guías"&&g.g!=="Corregir y comparar").flatMap(g=>g.it), done=all.filter(x=>S.oficial[x.id]&&S.oficial[x.id].d).length;
   $("#of-body").innerHTML=`<p class="small muted">${done} de ${all.length} prácticas hechas</p><div class="of-prog"><i style="width:${Math.round(done/all.length*100)}%"></i></div>`+
     OFICIAL.map(g=>`<h3 style="margin-top:14px">${esc(g.g)}</h3><ul class="of-list">${g.it.map(x=>{const o=S.oficial[x.id]||{}; const prac=g.g!=="Guías"&&g.g!=="Corregir y comparar";
-      return `<li class="${o.d?"done":""}">${prac?`<input type="checkbox" data-of="${x.id}" ${o.d?"checked":""} aria-label="Hecho: ${esc(x.t)}">`:"<span></span>"}<div><a href="${ofUrl(x.r)}" target="_blank" rel="noopener">${esc(x.t)}</a>${o.d?`<small>Hecho el ${esc(new Date(o.d).toLocaleDateString("es-ES",{day:"numeric",month:"short"}))}${o.s?" · "+esc(o.s):""}</small>`:""}</div>${prac?`<input class="sc" data-ofs="${x.id}" value="${esc(o.s||"")}" placeholder="Nota" aria-label="Resultado de ${esc(x.t)}" maxlength="20">`:"<span></span>"}</li>`;}).join("")}</ul>`).join("")+
-    `<p class="small muted" style="margin-top:10px">Los PDF son de Trinity College London y se abren en su web. En «Nota» apunta lo que quieras: aciertos (12/15), palabras o tu impresión.</p>`;
+      return `<li class="${o.d?"done":""}">${prac?`<input type="checkbox" data-of="${x.id}" ${o.d?"checked":""} aria-label="Hecho: ${esc(x.t)}">`:"<span></span>"}<div><a href="${ofUrl(x)}" target="_blank" rel="noopener">${esc(x.t)}</a>${o.d?`<small>Hecho el ${esc(new Date(o.d).toLocaleDateString("es-ES",{day:"numeric",month:"short"}))}${o.s?" · "+esc(o.s):""}</small>`:""}</div>${prac?`<input class="sc" data-ofs="${x.id}" value="${esc(o.s||"")}" placeholder="Nota" aria-label="Resultado de ${esc(x.t)}" maxlength="20">`:"<span></span>"}</li>`;}).join("")}</ul>`).join("")+
+    `<p class="small muted" style="margin-top:10px">${DRV&&DRV.folder?`Los PDF se abren desde tu carpeta privada de Drive (<a href="https://drive.google.com/drive/folders/${esc(DRV.folder)}" target="_blank" rel="noopener">abrir carpeta</a>); solo tu cuenta de Google tiene acceso.`:"Los PDF son de Trinity College London y se abren en su web."} En «Nota» apunta lo que quieras: aciertos (12/15), palabras o tu impresión.</p>`;
 }
 document.addEventListener("change",e=>{ const id=e.target.dataset.of, ids=e.target.dataset.ofs; if(!id&&!ids) return; S.oficial=S.oficial||{};
   if(id){ const o=S.oficial[id]||{}; o.d=e.target.checked?Date.now():0; S.oficial[id]=o; }
@@ -1582,6 +1586,7 @@ $("#bk-imp").addEventListener("change",async e=>{ const f=e.target.files[0]; e.t
   catch(er){ msg.textContent="Ese archivo no es una copia de esta app."; } });
 
 /* ---------- init ---------- */
+loadDrive();
 sel.value=TASKS.some(t=>t.id===S.last)?S.last:"t1-3"; loadTask();
 paint();
 show(location.hash.slice(1)||"plan");
