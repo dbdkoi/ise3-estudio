@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ISE III · Estudio</title>
 <meta name="theme-color" content="#f7f6f2">
+<script>try{var t=localStorage.getItem("ise3_theme");if(t)document.documentElement.setAttribute("data-theme",t);}catch(e){}</script>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon.svg">
@@ -258,12 +259,38 @@ mark{background:var(--mark);color:inherit;border-radius:2px;padding:0 2px}
 .tabs{overflow-x:auto;scrollbar-width:none}.tabs::-webkit-scrollbar{display:none}
 .tabs a{font-family:var(--f-body);text-transform:none;letter-spacing:0;font-size:.9rem;font-weight:600;white-space:nowrap;flex:1 0 auto;padding-left:8px;padding-right:8px}
 .linkbtn{background:none;border:0;padding:0 2px;color:var(--accent);text-decoration:underline;font:inherit;cursor:pointer}
+/* Modos de lectura, brillo y pestañas como botones */
+:root[data-theme="sepia"]{
+  --bg:#f3ead3; --surface:#faf3e0; --soft:#ebdfc2; --ink:#3a2e1d; --muted:#6c5d45; --line:#d9caa6;
+  --accent:#8a4b12; --accent-ink:#fffaf0; --mark:#f0cf62; --good:#3d6b2f; --warn:#8a5a00; --bad:#9c3324; color-scheme:light; }
+:root[data-theme="red"]{
+  --bg:#0d0202; --surface:#170505; --soft:#240909; --ink:#ff8d7c; --muted:#c45f52; --line:#3a100d;
+  --accent:#ff5a44; --accent-ink:#140303; --mark:#5c170f; --good:#ff9a80; --warn:#ffb08a; --bad:#ff4d3a; color-scheme:dark; }
+:root[data-theme="red"] img{filter:grayscale(1) sepia(1) hue-rotate(-50deg) saturate(4) brightness(.6)}
+#dim{position:fixed;inset:0;background:#000;opacity:0;pointer-events:none;z-index:9999;transition:opacity .15s}
+.theme-chip{width:34px;height:34px;flex:0 0 34px;border:1.5px solid var(--line);background:var(--bg);color:var(--ink);border-radius:8px;cursor:pointer;font-size:1rem;line-height:1;padding:0}
+.theme-panel{max-width:780px;margin:0 auto;padding:0 16px 12px;display:none;gap:10px;flex-wrap:wrap;align-items:center}
+.theme-panel.open{display:flex}
+.th-opts{display:flex;gap:6px}
+.th-opt{display:flex;align-items:center;gap:6px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:5px 10px 5px 6px;font-size:.85rem;font-weight:600;cursor:pointer}
+.th-opt i{width:18px;height:18px;border-radius:50%;border:1px solid rgba(0,0,0,.25);display:block}
+.th-opt[aria-pressed="true"]{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent) inset}
+.th-dim{display:flex;align-items:center;gap:8px;font-size:.85rem;color:var(--muted);flex:1;min-width:200px}
+.th-dim input{flex:1;accent-color:var(--accent)}
+.tabs{gap:6px;padding:6px 8px}
+.tabs a,.tabs a[aria-current="page"]{border:1px solid var(--line)!important;border-radius:9px;background:var(--soft);color:var(--ink);padding:7px 10px!important;font-size:.86rem;line-height:1.2;box-shadow:0 1px 0 rgba(0,0,0,.08)}
+.tabs a[aria-current="page"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)!important}
+.tabs a:active{transform:translateY(1px);box-shadow:none}
+@media (max-width:719px){ main{padding-bottom:64px} .tabs{gap:4px;padding:6px 6px calc(6px + env(safe-area-inset-bottom))} .tabs a,.tabs a[aria-current="page"]{flex:1 1 auto;min-width:0;padding:7px 3px!important;font-size:.78rem} }
+.theme-chip svg{display:block;margin:auto}
 </style>
 </head>
 <body>
+<div id="dim" aria-hidden="true"></div>
 <header class="top">
   <div class="top-in">
     <div class="brand">ISE III <b>Reading &amp; Writing</b></div>
+    <button class="theme-chip" id="theme-chip" aria-expanded="false" aria-controls="theme-panel" title="Modo de pantalla y brillo" aria-label="Modo de pantalla y brillo"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg></button>
     <button class="timer-chip" id="timer-chip" aria-expanded="false" aria-controls="timer-panel" title="Cronómetro">⏱ 00:00</button>
     <button class="rut-chip" id="rut-chip" aria-expanded="false" aria-controls="rut-panel" title="Enviar el tiempo de hoy a tu app de rutina">Rutina</button>
     <nav class="tabs" aria-label="Secciones">
@@ -274,6 +301,15 @@ mark{background:var(--mark);color:inherit;border-radius:2px;padding:0 2px}
       <a href="#banco" data-v="banco" data-g="banco">Banco</a>
       <a href="#oficial" data-v="oficial" data-g="oficial">Exámenes</a>
     </nav>
+  </div>
+  <div class="theme-panel" id="theme-panel">
+    <div class="th-opts" role="group" aria-label="Modo">
+      <button class="th-opt" data-th="light"><i style="background:#f7f6f2"></i>Claro</button>
+      <button class="th-opt" data-th="dark"><i style="background:#1d212a"></i>Oscuro</button>
+      <button class="th-opt" data-th="sepia"><i style="background:#f0e2bd"></i>Lectura</button>
+      <button class="th-opt" data-th="red"><i style="background:#ff5a44"></i>Rojo</button>
+    </div>
+    <label class="th-dim">Brillo <input type="range" id="th-dim" min="40" max="100" step="5" value="100" aria-label="Brillo de pantalla"></label>
   </div>
   <div class="timer-panel" id="timer-panel">
     <button class="btn sm ghost" data-min="20">20 min · reading</button>
@@ -1741,6 +1777,19 @@ async function loadOficial(){
     if(!OFB||B.v!==OFB.v){ applyOficial(B); if(curView==="reading") show("reading"); }
     try{localStorage.setItem("ise3_oficial_cache",JSON.stringify(B));}catch(e){} }catch(e){ console.warn("oficial",e); }
 }
+
+/* ---------- modo de pantalla y brillo ---------- */
+(function(){
+  const TC={light:"#f7f6f2",dark:"#1d212a",sepia:"#faf3e0",red:"#170505"};
+  const cur=()=>document.documentElement.getAttribute("data-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");
+  function paint(){ const t=cur(); $$(".th-opt").forEach(b=>b.setAttribute("aria-pressed",b.dataset.th===t));
+    const m=document.querySelector('meta[name="theme-color"]'); if(m) m.content=TC[t]; }
+  function setDim(v){ v=Math.max(40,Math.min(100,Number(v)||100)); $("#dim").style.opacity=((100-v)/100).toFixed(2); $("#th-dim").value=v; try{localStorage.setItem("ise3_dim",v);}catch(e){} }
+  $("#theme-chip").addEventListener("click",()=>{ const p=$("#theme-panel"),o=!p.classList.contains("open"); p.classList.toggle("open",o); $("#theme-chip").setAttribute("aria-expanded",o); });
+  $$(".th-opt").forEach(b=>b.addEventListener("click",()=>{ document.documentElement.setAttribute("data-theme",b.dataset.th); try{localStorage.setItem("ise3_theme",b.dataset.th);}catch(e){} paint(); }));
+  $("#th-dim").addEventListener("input",e=>setDim(e.target.value));
+  let d=100; try{d=localStorage.getItem("ise3_dim")||100;}catch(e){} setDim(d); paint();
+})();
 
 /* ---------- init ---------- */
 loadDrive(); loadOficial();
